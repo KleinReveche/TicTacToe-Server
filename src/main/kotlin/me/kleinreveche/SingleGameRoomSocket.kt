@@ -26,9 +26,6 @@ fun Route.singleGameRoom(game: SingleTicTacToeGame) {
                             is PlayerMove -> {
                                 game.handleMove(player, action.move, action.gameVersion)
                             }
-                            "get_player_char" -> {
-                                outgoing.send(Frame.Text(player.toString()))
-                            }
                         }
                     }
                 }
@@ -48,10 +45,7 @@ private fun extractAction(message: String): Any {
 
     return when (type) {
         "player_move" -> {
-            Json.decodeFromString(payload)
-        }
-        "get_player_char" -> {
-            type
+            Json.decodeFromString<PlayerMove>(payload)
         }
         else -> throw IllegalArgumentException("Unknown message type")
     }

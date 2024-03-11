@@ -1,6 +1,6 @@
-val ktor_version: String by project
-val kotlin_version: String by project
-val logback_version: String by project
+val ktorVersion: String by project
+val kotlinVersion: String by project
+val logbackVersion: String by project
 
 plugins {
     kotlin("jvm") version "1.9.23"
@@ -9,13 +9,23 @@ plugins {
 }
 
 group = "me.kleinreveche"
-version = "0.0.1"
+version = "0.1.0"
 
 application {
     mainClass.set("me.kleinreveche.ApplicationKt")
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
+}
+
+tasks {
+    shadowJar {
+        archiveFileName.set("TicTacToe-Server-$version.jar")
+        archiveClassifier.set("")
+        manifest {
+            attributes["Main-Class"] = "me.kleinreveche.ApplicationKt"
+        }
+    }
 }
 
 repositories {
@@ -34,7 +44,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json-jvm")
     implementation("io.ktor:ktor-server-websockets-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
-    implementation("ch.qos.logback:logback-classic:$logback_version")
+    implementation("ch.qos.logback:logback-classic:$logbackVersion")
     testImplementation("io.ktor:ktor-server-tests-jvm")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
 }

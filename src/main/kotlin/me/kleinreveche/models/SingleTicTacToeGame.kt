@@ -16,9 +16,7 @@ class SingleTicTacToeGame {
     private val gameScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var delayGameJob: Job? = null
 
-    init {
-        state.onEach(::broadcast).launchIn(gameScope)
-    }
+    init { state.onEach(::broadcast).launchIn(gameScope) }
 
     fun connectPlayer(session: WebSocketSession): Char? {
         println("Connecting player...")
@@ -26,16 +24,12 @@ class SingleTicTacToeGame {
         val player = if (isPlayerX) PLAYER_O else PLAYER_X
 
         state.update {
-
             if (state.value.connectedPlayers.contains(player)) {
                 println("Player already connected!")
                 return null
             }
 
-            if (!playerSockets.containsKey(player)) {
-                playerSockets[player] = session
-            }
-
+            if (!playerSockets.containsKey(player)) { playerSockets[player] = session }
             it.copy(connectedPlayers = it.connectedPlayers + player)
         }
         println("Player $player connected!")
@@ -44,27 +38,23 @@ class SingleTicTacToeGame {
 
     fun disconnectPlayer(player: Char) {
         playerSockets.remove(player)
-        state.update {
-            it.copy(
-                connectedPlayers = it.connectedPlayers - player
-            )
-        }
+        state.update { it.copy(connectedPlayers = it.connectedPlayers - player) }
     }
 
     private suspend fun broadcast(state: GameState) {
         playerSockets.values.forEach { socket ->
-            socket.send(Json.encodeToString(state))
+            socket.send(Json.encodeToString(state.copy(currentPlayerConnectedChar = playerSockets.filter { it.value == socket }.keys.firstOrNull())))
         }
     }
 
-    fun handleMove(player: Char, move: Int, gameVersion: GameVersion) {
-        val currentPlayer = state.value.currentPlayerTurn
+    fun handleMove(player: Char, move: Int, gameVersion: Int) {
+        val currentPlayer = state.value.currentPlayerAtTurn
 
         /*
             Here we check if the game version is not the same as the current game version.
             In the future, we can add more game versions and handle them accordingly.
         */
-        if (GameVersion.VERSION_1 != gameVersion) return
+        if (gameVersion != 1) return
 
         if (state.value.board[move] != null || state.value.winningPlayer != null || currentPlayer != player) return
 
@@ -78,10 +68,13 @@ class SingleTicTacToeGame {
             val winningPlayerResult = getWinningPlayer()
 
             s.copy(
-                currentPlayerTurn = if (currentPlayer == PLAYER_X) PLAYER_O else PLAYER_X,
+                currentPlayerAtTurn = if (currentPlayer == PLAYER_X) PLAYER_O else PLAYER_X,
                 board = newField,
                 winningPlayer = winningPlayerResult.first?.also { startNewRound() },
                 winningMoves = winningPlayerResult.second,
+                playerXWins = if (winningPlayerResult.first == PLAYER_X) s.playerXWins + 1 else s.playerXWins,
+                playerOWins = if (winningPlayerResult.first == PLAYER_O) s.playerOWins + 1 else s.playerOWins,
+                draws = if (isBoardFull && winningPlayerResult.first == null) s.draws + 1 else s.draws,
                 isBoardFull = isBoardFull
             )
         }
@@ -117,9 +110,10 @@ class SingleTicTacToeGame {
             delay(5000L)
             state.update {
                 it.copy(
-                    currentPlayerTurn = PLAYER_X,
+                    currentPlayerAtTurn = PLAYER_X,
                     board = GameState.emptyField(),
                     winningPlayer = null,
+                    winningMoves = emptyList(),
                     isBoardFull = false
                 )
             }
