@@ -1,4 +1,4 @@
-package me.kleinreveche.models
+package me.kleinreveche.tictactoe.data.models
 
 import kotlinx.serialization.Serializable
 

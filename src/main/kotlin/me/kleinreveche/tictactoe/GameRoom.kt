@@ -1,16 +1,25 @@
-package me.kleinreveche.models
+package me.kleinreveche.tictactoe
 
-import io.ktor.websocket.*
-import kotlinx.coroutines.*
+import io.ktor.websocket.WebSocketSession
+import io.ktor.websocket.send
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import me.kleinreveche.tictactoe.data.models.GameState
+import me.kleinreveche.tictactoe.data.models.PLAYER_O
+import me.kleinreveche.tictactoe.data.models.PLAYER_X
 import java.util.concurrent.ConcurrentHashMap
 
-class SingleTicTacToeGame {
+class GameRoom(private val gameRoomManager: GameRoomManager, val roomId: String) {
     private val state = MutableStateFlow(GameState())
     private val playerSockets = ConcurrentHashMap<Char, WebSocketSession>()
     private val gameScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -19,41 +28,44 @@ class SingleTicTacToeGame {
     init { state.onEach(::broadcast).launchIn(gameScope) }
 
     fun connectPlayer(session: WebSocketSession): Char? {
-        println("Connecting player...")
+        println("Connecting player to Room $roomId...")
         val isPlayerX = state.value.connectedPlayers.any { it == PLAYER_X }
         val player = if (isPlayerX) PLAYER_O else PLAYER_X
 
         state.update {
             if (state.value.connectedPlayers.contains(player)) {
-                println("Player already connected!")
+                println("Player already connected to Room $roomId!")
                 return null
             }
 
             if (!playerSockets.containsKey(player)) { playerSockets[player] = session }
             it.copy(connectedPlayers = it.connectedPlayers + player)
         }
-        println("Player $player connected!")
+        println("Player $player connected to Room $roomId!")
         return player
     }
 
     fun disconnectPlayer(player: Char) {
         playerSockets.remove(player)
         state.update { it.copy(connectedPlayers = it.connectedPlayers - player) }
+
+        if (playerSockets.isEmpty()) {
+            gameRoomManager.deleteRoom(roomId)
+        }
     }
 
     private suspend fun broadcast(state: GameState) {
         playerSockets.values.forEach { socket ->
-            socket.send(Json.encodeToString(state.copy(currentPlayerConnectedChar = playerSockets.filter { it.value == socket }.keys.firstOrNull())))
+            socket.send(
+                Json.encodeToString(
+                    state.copy(currentPlayerConnectedChar = playerSockets.filter { it.value == socket }.keys.firstOrNull())
+                ))
         }
     }
 
     fun handleMove(player: Char, move: Int, gameVersion: Int) {
         val currentPlayer = state.value.currentPlayerAtTurn
 
-        /*
-            Here we check if the game version is not the same as the current game version.
-            In the future, we can add more game versions and handle them accordingly.
-        */
         if (gameVersion != 1) return
 
         if (state.value.board[move] != null || state.value.winningPlayer != null || currentPlayer != player) return
@@ -65,7 +77,7 @@ class SingleTicTacToeGame {
 
             val isBoardFull = newField.all { it != null }
             if (isBoardFull) startNewRound()
-            val winningPlayerResult = getWinningPlayer()
+            val winningPlayerResult = GameEngine.getWinningPlayer(state.value.board)
 
             s.copy(
                 currentPlayerAtTurn = if (currentPlayer == PLAYER_X) PLAYER_O else PLAYER_X,
@@ -80,29 +92,7 @@ class SingleTicTacToeGame {
         }
     }
 
-    private fun getWinningPlayer(): Pair<Char?, List<Int>> {
-        val board = state.value.board
-        var winningPlayer: Char? = null
-        val winningIndices = mutableListOf<Int>()
-        val winningMoves = arrayOf(
-            arrayOf(0, 1, 2), arrayOf(3, 4, 5), arrayOf(6, 7, 8),
-            arrayOf(0, 3, 6), arrayOf(1, 4, 7), arrayOf(2, 5, 8),
-            arrayOf(2, 4, 6), arrayOf(0, 4, 8)
-        )
-
-        for (move in winningMoves) {
-            val (a, b, c) = move
-            if (board[a] == board[b] && board[b] == board[c] && board[a] != null) {
-                winningIndices.addAll(move)
-            }
-        }
-
-        if (winningIndices.isNotEmpty()) {
-            winningPlayer = board[winningIndices[0]]
-        }
-
-        return Pair(winningPlayer, winningIndices)
-    }
+    fun getNumberOfPlayers(): Int = state.value.connectedPlayers.size
 
     private fun startNewRound() {
         delayGameJob?.cancel()

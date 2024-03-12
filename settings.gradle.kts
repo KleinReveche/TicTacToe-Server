@@ -1,1 +1,1 @@
-rootProject.name = "TicTacToe-Server"
+rootProject.name = "me.kleinreveche.tictactoe-server"
